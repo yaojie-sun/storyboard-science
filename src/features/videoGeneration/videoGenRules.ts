@@ -1,0 +1,115 @@
+import { invoke } from '@tauri-apps/api/core';
+
+export interface IntegrationRules {
+  model: string;
+  max_tokens: number;
+  system_prompt: string;
+}
+
+export interface VideoGenConstraints {
+  global_rule: string;
+  spatial_anchor?: string;
+  physics_rule?: string;
+  facing_lock?: string;
+  axis_lock?: string;
+  landmark_lock?: string;
+  spatial_progression?: string;
+  pose_lock?: string;
+  prop_lock?: string;
+  anti_hallucination?: string;
+  physics_law?: string;
+  shot_cutting?: string;
+  object_persistence?: string;
+  motion_catalog: string;
+  shot_continuity: string;
+  hard_constraints: string[];
+}
+
+export interface VideoGenRules {
+  version: string;
+  integration: IntegrationRules;
+  constraints: VideoGenConstraints;
+  /** 负面提示词，用于视频生成质量过滤 */
+  negative_prompt?: string;
+  /** 注入到提示词前面的规则文本（所有模型通用） */
+  prompt_rule?: string;
+  /** CFG scale，控制生成与提示词的匹配度 */
+  guidance_scale?: number;
+  /** 镜头模式：single 单镜头 / multi 多镜头 */
+  shot_type?: string;
+}
+
+// 科普版兜底规则 — 仅网络故障时使用。完整规则见服务端 video_gen_rules_science.json
+const DEFAULT_PROMPT_RULE = '【铁律·科普版】图1=视频首帧，视频从图1开始科学呈现旅程（整体→微观·静态→动态），经过图2-图5用连续平滑运镜丝滑过渡，在图6结束。按左→右、上→下顺序逐格处理全部6张宫格图。每张宫格=一个关键帧。画面内容100%来自宫格参考图，文字仅提供运镜+动作+仪器轻响/环境氛围声。禁止修改参考图中科学主体的结构/纹理/色彩/尺度。科学主体外观由参考图锁定。【平滑运镜·禁止硬切】同一科学主体的六格是同一场景的连续展示，镜头之间禁止硬切/跳切/幻灯片式切换，必须用连续平滑运镜（宏观推镜→微观对焦推近→显微景深游移→粒子特写）一气呵成丝滑衔接，如同一镜到底的科普短片；禁止逐格用固定机位定点硬切。科普摄影美学：禁止CG感/塑料感/3D渲染。真实材质纹理（金属光泽/玻璃通透/生物组织质感）、真实不完全完美。科学写实质感：静止也有反应液体流动/分子运动/粒子漂移/光线变化，主体由形态与质感细节传递（克制真实不夸张），动态有加减速与重心转移；禁止蜡像感/塑料质感/死板结构/固定状态/机器人匀速/瞬间起停/卡通夸张渲染。生物制品/科普内容仅展示产品与科学场景，不做疾病疗效、诊疗、药效或绝对化科学结论承诺。';
+
+const DEFAULT_RULES: VideoGenRules = {
+  version: '30',
+  integration: {
+    model: 'none',
+    max_tokens: 0,
+    system_prompt: '',
+  },
+  guidance_scale: 8.0,
+  shot_type: 'multi',
+  negative_prompt: 'texture distortion, structural drift, scale inconsistency, color bleeding, material smear, shape morphing, particle count error, geometry warp, lighting inconsistency, extra objects, missing components, plastic look, rigid simulation, unnatural drape, floating object, chromatic aberration, morphing, distortion, flicker, unnatural physics, CG look, plastic texture, 3D render, video game graphics, oversaturated colors, fake glow, AI watermark, empty frame, static image, abrupt transition, doll-like, wax figure, frozen state, dead structure, lifeless detail, uncanny valley, robotic movement, mechanical motion, exaggerated effect, pseudo-science exaggeration, cartoon render, stiffness, waxiness',
+  prompt_rule: DEFAULT_PROMPT_RULE,
+  constraints: {
+    global_rule: 'STORYBOARD = GROUND TRUTH. Visual content 100% anchored by 6 storyboard frames. Text provides camera + movement + ambient lab sounds only. All camera movement within frame boundaries. Realistic science photography required — no CG/plastic/3D render aesthetics.',
+    object_persistence: 'Science subject exists every frame. Structure, texture, color, and scale locked by storyboard. No morphing or count change.',
+    landmark_lock: 'Science subject appearance anchored by storyboard. Camera movement does not alter structure/texture/color/scale.',
+    spatial_progression: 'Science presentation journey: overall→micro, static→dynamic. Each shot advances the science story. No random jumping between unrelated subjects.',
+    motion_catalog: 'slow push-in | slow pull-out | smooth pan L->R | smooth pan R->L | smooth tracking | orbit L | orbit R | tilt up | tilt down | crane up | crane down | macro focus pull | microscope depth drift | star-field push-in | orbital reveal | cosmic dive | timelapse speed-up | lab bench pan | particle close-up | low-angle epic rise | contre-jour silhouette | fixed (only for opening/closing freeze, never for frame-to-frame transition)',
+    shot_continuity: 'Storyboard L->R, T->B = science presentation progression. Same-scene frames must connect via continuous smooth camera moves (push-in / tracking / orbit / pan) for a seamless one-take feel. Hard cut ONLY when the location / subject / time fundamentally changes; never hard-cut between frames of the same science subject.',
+    hard_constraints: [
+      'Storyboard = ground truth. Visual content from storyboard only.',
+      'Each shot aligns with corresponding storyboard frame.',
+      'Frame-to-frame transitions must be smooth.',
+      'No hard cuts between same-scene frames — connect them with continuous smooth camera moves (one-take feel).',
+      'All camera movement within storyboard frame boundaries.',
+      'Science subject exists every frame — no morphing.',
+      'No image stretching. No subject distortion.',
+      'Process all 6 storyboard frames in science presentation sequence.',
+      'Natural science lighting consistency across all frames.',
+      'No AI dialogue, voiceover, or narration.',
+      'Science realism: subtle motion, real material texture, structural integrity — never frozen, never doll-like, never plastic.',
+      'Bioproduct/science content shows products and science scenes only — no disease efficacy, diagnosis, drug effect, or absolute science conclusions.',
+    ],
+  },
+};
+
+let cachedRules: VideoGenRules | null = null;
+let fetchPromise: Promise<VideoGenRules> | null = null;
+
+export async function fetchVideoGenRules(model?: string): Promise<VideoGenRules> {
+  if (cachedRules) return cachedRules;
+  if (fetchPromise) return fetchPromise;
+
+  fetchPromise = (async () => {
+    try {
+      const raw: string = await invoke('fetch_video_gen_rules', { model: model || null });
+      const parsed = JSON.parse(raw) as VideoGenRules;
+      if (parsed?.version && parsed.constraints) {
+        cachedRules = parsed;
+        return cachedRules;
+      }
+      throw new Error('Invalid rules from server');
+    } catch (e) {
+      console.warn('[videoGenRules] Server fetch failed, using fallback:', e);
+      cachedRules = DEFAULT_RULES;
+      return cachedRules;
+    } finally {
+      fetchPromise = null;
+    }
+  })();
+
+  return fetchPromise;
+}
+
+export function getCachedRules(): VideoGenRules | null {
+  return cachedRules;
+}
+
+export function clearRulesCache(): void {
+  cachedRules = null;
+  fetchPromise = null;
+}

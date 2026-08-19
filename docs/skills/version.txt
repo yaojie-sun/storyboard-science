@@ -1,6 +1,7 @@
 name: xiaoya-ai-cinema-science
-version=1.0.0
+version=1.0.1
 description: 小鸭AI科普短视频提示词 — 科普行业AI短视频制作专家
-release_date: 2026-08-17
+release_date: 2026-08-19
 changelog: |
+  v1.0.1 — 接入参考图读图能力：参考图视觉描述优先采用，直接采信系统生成的视觉信息锁定科学主体结构/材质/尺度/形态/特征，不再提示无法看到图片
   v1.0.0 — 初始版本：科普行业专属SKILL，宏观科学/微观科普/生物制品/科幻世界/科学实验/科普活动/科学故事七大视频类型

@@ -1,12 +1,12 @@
 {
-  "version": "30",
+  "version": "31",
   "integration": {
     "model": "none",
     "max_tokens": 0,
     "system_prompt": ""
   },
   "negative_prompt": "texture distortion, structural drift, scale inconsistency, color bleeding, material smear, shape morphing, particle count error, geometry warp, lighting inconsistency, extra objects, missing components, plastic look, rigid simulation, unnatural drape, floating object, chromatic aberration, morphing, distortion, flicker, unnatural physics, CG look, plastic texture, 3D render, video game graphics, oversaturated colors, fake glow, AI watermark, empty frame, static image, abrupt transition, doll-like, wax figure, frozen state, dead structure, lifeless detail, uncanny valley, robotic movement, mechanical motion, exaggerated effect, pseudo-science exaggeration, cartoon render, stiffness, waxiness",
-  "prompt_rule": "【铁律·科普版】图1=视频首帧，视频从图1开始科学呈现旅程（整体→微观·静态→动态），经过图2-图5用连续平滑运镜丝滑过渡，在图6结束。按左→右、上→下顺序逐格处理全部6张宫格图。每张宫格=一个关键帧。画面内容100%来自宫格参考图，文字仅提供运镜+动作+仪器轻响/环境氛围声。禁止修改参考图中科学主体的结构/纹理/色彩/尺度。科学主体外观由参考图锁定。【平滑运镜·禁止硬切】同一科学主体的六格是同一场景的连续展示，镜头之间禁止硬切/跳切/幻灯片式切换，必须用连续平滑运镜（宏观推镜→微观对焦推近→显微景深游移→粒子特写）一气呵成丝滑衔接，如同一镜到底的科普短片；禁止逐格用固定机位定点硬切。科普摄影美学：禁止CG感/塑料感/3D渲染。真实材质纹理（金属光泽/玻璃通透/生物组织质感）、真实不完全完美。科学写实质感：静止也有反应液体流动/分子运动/粒子漂移/光线变化，主体由形态与质感细节传递（克制真实不夸张），动态有加减速与重心转移；禁止蜡像感/塑料质感/死板结构/固定状态/机器人匀速/瞬间起停/卡通夸张渲染。生物制品/科普内容仅展示产品与科学场景，不做疾病疗效、诊疗、药效或绝对化科学结论承诺。",
+  "prompt_rule": "【铁律·科普版】图1=视频首帧，视频从图1开始科学呈现旅程（整体→微观·静态→动态），经过图2-图5用连续平滑运镜丝滑过渡，在图6结束。按左→右、上→下顺序逐格处理全部6张宫格图。每张宫格=一个关键帧。画面内容100%来自宫格参考图，文字仅提供运镜+动作+仪器轻响/环境氛围声。禁止修改参考图中科学主体的结构/纹理/色彩/尺度。科学主体外观由参考图锁定。【平滑运镜·禁止硬切】同一科学主体的六格是同一场景的连续展示，镜头之间禁止硬切/跳切/幻灯片式切换，必须用连续平滑运镜（宏观推镜→微观对焦推近→显微景深游移→粒子特写）一气呵成丝滑衔接，如同一镜到底的科普短片；禁止逐格用固定机位定点硬切。【镜头时长·强制】每个镜头（Shot）时长不低于1.5秒，禁止一闪而过的碎镜头。宫格切换时，每个宫格画面至少完整停留1.5秒再过渡到下一格，宁长勿短。科普摄影美学：禁止CG感/塑料感/3D渲染。真实材质纹理（金属光泽/玻璃通透/生物组织质感）、真实不完全完美。科学写实质感：静止也有反应液体流动/分子运动/粒子漂移/光线变化，主体由形态与质感细节传递（克制真实不夸张），动态有加减速与重心转移；禁止蜡像感/塑料质感/死板结构/固定状态/机器人匀速/瞬间起停/卡通夸张渲染。生物制品/科普内容仅展示产品与科学场景，不做疾病疗效、诊疗、药效或绝对化科学结论承诺。",
   "guidance_scale": 8.0,
   "shot_type": "multi",
   "constraints": {
@@ -15,7 +15,7 @@
     "landmark_lock": "Science subject appearance anchored by storyboard. Camera movement does not alter structure/texture/color/scale.",
     "spatial_progression": "Science presentation journey: overall→micro, static→dynamic. Each shot advances the science story. No random jumping between unrelated subjects.",
     "motion_catalog": "slow push-in | slow pull-out | smooth pan L->R | smooth pan R->L | smooth tracking | orbit L | orbit R | tilt up | tilt down | crane up | crane down | macro focus pull | microscope depth drift | star-field push-in | orbital reveal | cosmic dive | timelapse speed-up | lab bench pan | particle close-up | low-angle epic rise | contre-jour silhouette | fixed (only for opening/closing freeze, never for frame-to-frame transition)",
-    "shot_continuity": "Storyboard L->R, T->B = science presentation progression. Same-scene frames must connect via continuous smooth camera moves (push-in / tracking / orbit / pan) for a seamless one-take feel. Hard cut ONLY when the location / subject / time fundamentally changes; never hard-cut between frames of the same science subject.",
+    "shot_continuity": "Storyboard L->R, T->B = science presentation progression. Same-scene frames must connect via continuous smooth camera moves (push-in / tracking / orbit / pan) for a seamless one-take feel. Hard cut ONLY when the location / subject / time fundamentally changes; never hard-cut between frames of the same science subject. Each shot lasts ≥1.5s — no flash cuts, no blink-and-miss frames.",
     "hard_constraints": [
       "Storyboard = ground truth. Visual content from storyboard only.",
       "Each shot aligns with corresponding storyboard frame.",
@@ -28,7 +28,8 @@
       "Natural science lighting consistency across all frames.",
       "No AI dialogue, voiceover, or narration.",
       "Science realism: subtle motion, real material texture, structural integrity — never frozen, never doll-like, never plastic.",
-      "Bioproduct/science content shows products and science scenes only — no disease efficacy, diagnosis, drug effect, or absolute science conclusions."
+      "Bioproduct/science content shows products and science scenes only — no disease efficacy, diagnosis, drug effect, or absolute science conclusions.",
+      "Each shot lasts ≥1.5 seconds — no flash cuts, no blink-and-miss frames."
     ]
   }
 }

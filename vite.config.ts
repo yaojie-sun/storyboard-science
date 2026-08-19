@@ -23,13 +23,13 @@ export default defineConfig({
 
   clearScreen: false,
   server: {
-    port: 9999,
+    port: 9996,
     strictPort: false,
     host: "127.0.0.1",
     hmr: IS_MOBILE ? undefined : {
       protocol: "ws",
       host: "127.0.0.1",
-      port: 9999,
+      port: 9996,
     },
     watch: {
       ignored: ["**/src-tauri/**"],

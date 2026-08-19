@@ -634,6 +634,8 @@
     "noStoryboardPrompt": "No storyboard/video prompts in Chat. Generate a storyboard in Chat first.",
     "previewPlaceholder": "Video will be previewed here after generation",
     "generating": "Generating video...",
+    "queued": "Queued, please wait...",
+    "queuedHint": "High task volume — waiting for compute allocation",
     "creditCost": "Cost: {{cost}} credits",
     "generate": "Generate Video (2K)",
     "download": "Download",

@@ -148,7 +148,7 @@ pub fn get_user_dir(app: &AppHandle) -> Result<PathBuf, String> {
     // 从旧版本（< v6.0.38）迁移数据：旧数据在 app_data_dir 根目录平铺，新数据在 users/{id}/ 下
     migrate_old_user_data(&app_data_dir, &dir);
 
-    // 旅游版是独立产品线，不从其他 App 迁移数据
+    // 科普版是独立产品线，不从其他 App 迁移数据
 
     Ok(dir)
 }

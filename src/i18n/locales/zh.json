@@ -632,6 +632,8 @@
     "noStoryboardPrompt": "Chat 中暂无分镜/视频提示词，请先在 Chat 中生成分镜。",
     "previewPlaceholder": "生成后将在此处预览视频",
     "generating": "正在生成视频...",
+    "queued": "排队中，请稍候...",
+    "queuedHint": "当前任务较多，正在等待分配算力",
     "creditCost": "本次消耗: {{cost}} 积分",
     "generate": "生成视频（2K）",
     "download": "下载",

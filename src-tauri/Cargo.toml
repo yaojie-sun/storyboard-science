@@ -1,6 +1,6 @@
 [package]
 name = "storyboard-science"
-version = "1.0.0"
+version = "1.1.0"
 description = "分镜大师科普版 - 科普行业AI短视频生成工具"
 authors = ["you"]
 edition = "2021"

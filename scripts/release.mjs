@@ -261,13 +261,9 @@ try {
 } finally {
   fs.rmSync(tempNotesFile, { force: true });
 }
-// 主推送 → sunsh0704（GitHub Actions 构建）
-runStreaming("git", ["push", "sunsh0704", branch]);
-runStreaming("git", ["push", "sunsh0704", tag]);
-
-// 备份推送 → sun-lzy
+// 推送 → origin（yaojie-sun/storyboard-science，tag 推送自动触发 GitHub Actions 构建）
 runStreaming("git", ["push", "origin", branch]);
 runStreaming("git", ["push", "origin", tag]);
 
 console.log(`Release triggered: ${tag}`);
-console.log("GitHub Actions (sunsh0704) will build artifacts and publish the Release automatically.");
+console.log("GitHub Actions (origin) will build artifacts and publish the Release automatically.");

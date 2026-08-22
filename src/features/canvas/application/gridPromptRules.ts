@@ -5,23 +5,13 @@ import { invoke } from '@tauri-apps/api/core';
 export interface GridPromptRules {
   version: string;
   grid_prompt: {
+    persona?: string;
     global_header: string;
+    cinematic_quality?: string;
     reference_image_priority: string;
     continuity_and_axis: string;
+    closeup_axis_lock?: string;
     grid_layout: string;
-    section_identity_lock: string;
-    identity_lock: string;
-    section_scene_lock: string;
-    scene_lock: string;
-    section_camera: string;
-    camera_style: string;
-    section_sequence: string;
-    sequence_context: string;
-    section_visual_carryover: string;
-    visual_identity_carryover: string[];
-    section_reference_priority: string;
-    section_prop_spatial_lock: string;
-    prop_spatial_lock: string;
     section_frames: string;
     frame_title_template: string;
     frame_fields: string[];
@@ -32,14 +22,9 @@ export interface GridPromptRules {
     frame_field_source_auto: string;
     frame_field_source_user: string;
     frame_ref_image_instruction: string;
-    section_layout: string;
-    layout_strictness: string;
-    section_hard_constraints: string;
+    frame_quality_suffix?: string;
     hard_constraints: string[];
-    action_continuity_fallback: string;
-    facing_inference_rule: string;
-    style_consistent_text: string;
-    disable_text_in_image_text: string;
+    disable_text_in_image_text?: string;
   };
 }
 
@@ -72,72 +57,50 @@ export interface PromptSanitizeResult {
 
 const DEFAULT_RULES: GridPromptRules =
 {
-  version: '6',
+  version: '1-science',
   grid_prompt: {
+    persona:
+      '你是一位专业的科学/科普摄影师，擅长科普摄影级光影与科学主体叙事。',
     global_header:
-      'CRITICAL: Unless user explicitly requests anime/manga/cartoon style, ALL content MUST be PHOTOREALISTIC — hyper-realistic humans, realistic skin/hair/fabrics, cinematic lighting. Generate ONE image at {aspect_ratio}, containing exactly {total} panels with thin white gutters. {spatial_layout} All panels equal size. All panels = SAME scene, SAME characters.',
+      '按以下规则生成一张{aspect_ratio}真实照片级图像，包含恰好{rows}×{cols}={total}个等大画面，固定网格排列，白色细边间距。所有画面描绘同一科学主体，视觉风格一致。\n\n[规则A·科学呈现旅程] 画面按科学展示逻辑排列：从整体到微观、从宏观到细节、从静态到动态。第1格建立科学主体整体印象（全景全貌），后续画面层层深入。禁止画面间出现主体突变或逻辑断裂。\n\n[规则B·主体锚定] 每个画面必须包含可见的科学主体元素作为连续性锚点。特写画面需保留主体的整体上下文（如局部特写→整体结构轮廓仍在画面中），禁止纯色/完全虚化背景中孤立展示细节。',
+    cinematic_quality:
+      '[规则C·科普光影] 全部{total}个画面强制高质量科普光影体系。主光源为实验室冷光/自然光+侧轮廓光，确保材质质感和主体形态同时清晰呈现。侧逆光勾勒主体外轮廓线条。禁止平光/无阴影的扁平打光。高光柔和不溢出材质纹理。\n\n[规则D·质感] 浅景深虚化背景（f/2.8-f/4），焦外光斑自然。材质纹理清晰可见（金属光泽/玻璃通透/生物组织质感/星云颗粒）。结构细节/表面纹理的真实质感。禁止塑料感/过度锐化/CG感/3D渲染风格。禁止主体变形/结构错位/色彩偏移/尺度失真。',
     reference_image_priority:
-      'REFERENCE IMAGE ABSOLUTE PRIORITY: All reference images are shared across ALL {total} panels. References are the SINGLE SOURCE OF TRUTH for ALL visual aspects — characters, clothing, props, colors, materials, architecture, environment, style. Text has ZERO authority over anything visible in references. Text ONLY describes actions, emotions, camera angles. Reference=LAW. Text=actions/feelings ONLY.',
+      '[规则E·参考图] 参考图是科学主体视觉元素的唯一来源（结构/纹理/色彩/尺度/形态）。文字仅指定主体动作/运镜方式/光影条件。禁止修改参考图中任何科学主体内容——结构/纹理/色彩/尺度必须100%锁定。',
     continuity_and_axis:
-      'CHARACTER & PROP CONTINUITY + 180 DEG AXIS LOCK: All {total} panels share ONE continuous physical reality. Each panel inherits posture, stance, body axis, facing direction, AND all nearby prop/object positions from PREVIOUS panel UNCHANGED — unless user EXPLICITLY states a change. DEFAULT=CONTINUITY. BODY AXIS LOCK: Head direction, body orientation, limb placement must remain IDENTICAL across panels. PROP SPATIAL LOCK: All nearby objects/pets maintain fixed position relative to character. Cat in front of character in panel 1 = in front in ALL panels. 180 DEG CAMERA AXIS LOCK: Camera must NEVER cross the axis line. Consistent screen direction across ALL panels.',
+      '[规则F·主体连续] 全部{total}个画面共享同一科学主体。主体的结构/纹理/尺度从画面1继承不变。光照方向（主光源/轮廓光方向）在全部{total}个画面中保持一致。禁止画面间出现结构偏差/尺度变化/纹理错位。',
+    closeup_axis_lock:
+      '[特写主体锚] 本格为特写/近景：1) 保留可见主体整体作为空间锚点 2) 材质光影方向=画面1 3) 禁止纯色/完全虚化背景 4) 不确定时参考上一格整体造型中的主体关系。',
     grid_layout:
-      'LAYOUT: {spatial_layout} Each panel is {cell_aspect_ratio} aspect ratio. Compose each panel to fit {cell_aspect_ratio} — do NOT crop or cut off subjects. Do NOT rearrange, reflow, or change panel count. Panel numbers here are for spatial reference ONLY — do NOT draw any numbers or labels on the image. NON-NEGOTIABLE.',
-    section_identity_lock: 'CHARACTER IDENTITY LOCK',
-    identity_lock:
-      'Characters in reference images are the SINGLE SOURCE OF TRUTH. Copy EXACTLY — do NOT guess, interpret, or embellish.',
-    section_scene_lock: 'SCENE LOCK',
-    scene_lock:
-      'Environment, lighting, colors, materials in reference images are the ONLY valid scene. Reference shows black roof tiles → generate black roof tiles. Text about materials/colors = VOID.',
-    section_camera: 'CAMERA STYLE',
-    camera_style:
-      'All {total} panels must use consistent cinematography: same lens, depth of field, color grading, lighting direction across every panel.',
-    section_sequence: 'SEQUENCE & CHARACTER CONTINUITY',
-    sequence_context:
-      'These {total} panels form ONE continuous narrative. Each panel inherits posture, stance, body axis, facing, physical state, AND all nearby prop positions from PREVIOUS panel UNCHANGED — unless user EXPLICITLY states a change. DEFAULT=CONTINUITY.',
-    section_visual_carryover: 'VISUAL IDENTITY CARRY-OVER',
-    visual_identity_carryover: [
-      'Panel 1 establishes canonical visual identity. Every subsequent panel must carry over EXACTLY: face, hair, clothing, accessories, props, body axis, spatial orientation.',
-      'Before each panel, verify: character looks identical to panel 1. Any difference = CORRECT IT immediately.',
-      'When in doubt, COPY previous panel. Continuity is ALWAYS safer than unrequested variation.',
-    ],
-    section_reference_priority: 'REFERENCE IMAGE ABSOLUTE PRIORITY',
-    section_prop_spatial_lock: 'PROP & OBJECT SPATIAL LOCK',
-    prop_spatial_lock:
-      'All props, objects, and animals near a character have FIXED relative positions across ALL {total} panels. If cat sleeps on mat in front of character in panel 1, it stays there in all panels — no drift, no side-switching, no disappearing. Scene objects (furniture, rugs, lamps) remain at fixed locations. Before each panel, verify prop positions match panel 1.',
-    section_frames: 'PANEL DESCRIPTIONS',
-    frame_title_template: 'Panel {index} of {total}:',
-    frame_default_shot: 'Medium shot',
-    frame_default_emotion: 'neutral',
-    frame_default_facing: 'front-facing',
-    frame_field_source_auto: '(auto)',
-    frame_field_source_user: '(user)',
+      '[规则G·网格] 严格{rows}×{cols}={total}个画面，等大格子，均匀间距。不可协商。',
+    section_frames: '--- 画面描述 ---',
+    frame_title_template: '画面{index}/{total} [第{row}行第{col}列]:',
+    frame_default_shot: '中景',
+    frame_default_emotion: '自然',
+    frame_default_facing: '',
+    frame_field_source_auto: '(自动)',
+    frame_field_source_user: '(用户)',
     frame_ref_image_instruction: '',
-    frame_fields: ['shot', 'action', 'emotion', 'facing'],
+    frame_fields: ['shot', 'action', 'emotion', 'lighting', 'science'],
     frame_field_labels: {
-      shot: 'Shot',
-      action: 'Action',
-      emotion: 'Emotion',
-      facing: 'Facing',
+      shot: '景别',
+      action: '动作',
+      emotion: '氛围',
+      lighting: '光影',
+      science: '科学主体',
     },
-    section_layout: 'LAYOUT',
-    layout_strictness:
-      'Layout is EXACTLY as described: {spatial_layout} All panels equal size with uniform gutters. Do NOT reflow, rearrange, or change panel count. This layout is NON-NEGOTIABLE.',
-    section_hard_constraints: 'HARD CONSTRAINTS',
     hard_constraints: [
-      'Overall image aspect ratio MUST be exactly {aspect_ratio}. Each of the {total} panels MUST be {cell_aspect_ratio} — compose subjects to fit without cropping.',
-      'Exactly {total} panels — {spatial_layout} No rearrangement, reflow, or merging.',
-      'Character appearance 100% identical across all panels — face, hair, clothing, skin tone, eye color. ZERO deviation.',
-      'ALL props, objects, and animals must maintain FIXED spatial positions relative to characters and scene across ALL {total} panels. No drift, teleporting, or side-switching. Handheld items stay in same hand with same grip.',
-      'Reference images override ALL text for any visual element. Posture, body axis, and 180° camera axis carry over UNCHANGED from previous panel. Default=continuity.',
+      '[科学旅程] 从整体到微观、从宏观到细节、从静态到动态，科学展示逻辑不可断裂。',
+      '[主体锚定] 特写/近景须保留主体整体作为锚点，禁止孤立展示细节。',
+      '[结构一致] 结构/纹理/尺度在全部{total}个画面中保持一致。',
+      '[格式] 比例{aspect_ratio}，{total}画面{rows}×{cols}网格，禁止合并重排。',
+      '[主体保全] 科学主体结构/纹理/色彩/尺度100%一致。参考图覆盖文字视觉描述。主体外观从前格继承。',
+      '[合规] 生物制品/科普内容仅展示产品与科学场景，不做疾病疗效、诊疗、药效或绝对化科学结论承诺。',
     ],
-    action_continuity_fallback:
-      'Every panel inherits posture, stance, body position, physical state, AND nearby prop positions from PREVIOUS panel UNCHANGED unless user EXPLICITLY states a change.',
-    facing_inference_rule:
-      'Determine facing from PREVIOUS panel direction as baseline via 180-degree rule.',
-    style_consistent_text:
-      'Maintain visual style, lighting, and color grading consistent with reference images across all panels.',
+    frame_quality_suffix:
+      '高仿真度，科普摄影级别光影，浅景深虚化，材质纹理真实，金属光泽可见/玻璃通透自然/生物组织质感清晰。保留参考图中原有科学主体结构/纹理/色彩/尺度，仅禁止AI凭空新增水印/字幕/随机字母。主体结构/纹理/尺度100%锁定参考图。',
     disable_text_in_image_text:
-      'Keep all existing text, logos, labels, and branding from the reference images exactly as they appear. Do NOT add new text overlays, subtitles, UI elements, or panel numbers to the generated image. Reference image text must be preserved faithfully.'
+      '禁止在图片中新增任何描述文本、字幕、水印、编号或随机字母。仅保留参考图中原有的科学标注/刻度/标识。'
   },
 };
 
@@ -279,6 +242,45 @@ export function detectUserSpecifiedContinuity(
   );
 }
 
+// ---- lighting detection (per-frame 光影) ----
+
+const LIGHTING_PATTERNS: Array<{ re: RegExp; label: string }> = [
+  { re: /冷光|冷色|冷调|实验室光|无影灯/i, label: '冷光' },
+  { re: /暖光|暖黄|暖色光/i, label: '暖光' },
+  { re: /侧逆光|轮廓光|逆光/i, label: '侧逆光/轮廓光' },
+  { re: /荧光|紫外|uv光|激发光/i, label: '荧光/紫外' },
+  { re: /暗场|黑背景|暗背景/i, label: '暗场' },
+  { re: /亮场|白背景|明场/i, label: '亮场/明场' },
+  { re: /星光|星空|深空|星云光/i, label: '星光/深空' },
+  { re: /自然光|日光|阳光/i, label: '自然光' },
+];
+
+export function detectLighting(description: string): string | null {
+  for (const { re, label } of LIGHTING_PATTERNS) {
+    if (re.test(description)) return label;
+  }
+  return null;
+}
+
+// ---- science subject detection (per-frame 科学主体) ----
+
+const SCIENCE_PATTERNS: Array<{ re: RegExp; label: string }> = [
+  { re: /宏观|宇宙|星系|星云|行星|恒星|深空|天文|太阳系/i, label: '宏观宇宙' },
+  { re: /微观|细胞|细菌|病毒|微生物|分子|原子|dna|基因|染色体|蛋白/i, label: '微观结构' },
+  { re: /显微镜|显微|电镜|放大/i, label: '显微视角' },
+  { re: /试剂|疫苗|检测盒|培养基|试管|烧杯|培养皿|离心/i, label: '生物制品/实验器材' },
+  { re: /化石|晶体|岩石|矿物|地质|标本|切片/i, label: '地质标本/切片' },
+  { re: /实验|反应|演示|现象|过程/i, label: '实验过程' },
+  { re: /科幻|未来|星际|异星|赛博|机械体/i, label: '科幻场景' },
+];
+
+export function detectScience(description: string): string | null {
+  for (const { re, label } of SCIENCE_PATTERNS) {
+    if (re.test(description)) return label;
+  }
+  return null;
+}
+
 // ---- prompt builder ----
 
 function buildSpatialLayoutDescription(rows: number, cols: number, total: number): string {
@@ -358,6 +360,8 @@ function buildFrameFields(
   const userShot = detectShotScale(frame.description);
   const userEmotion = detectEmotion(frame.description);
   const userFacing = detectUserSpecifiedFacing(frame.description);
+  const userLighting = detectLighting(frame.description);
+  const userScience = detectScience(frame.description);
 
   for (const field of fields) {
     switch (field) {
@@ -387,6 +391,50 @@ function buildFrameFields(
         });
         break;
       }
+      case 'emotion':
+        entries.push({
+          key: 'emotion',
+          value: userEmotion ?? gp.frame_default_emotion,
+          source: userEmotion
+            ? gp.frame_field_source_user
+            : gp.frame_field_source_auto,
+        });
+        break;
+      case 'facing':
+        entries.push({
+          key: 'facing',
+          value: userFacing ?? gp.frame_default_facing,
+          source: userFacing
+            ? gp.frame_field_source_user
+            : gp.frame_field_source_auto,
+        });
+        break;
+      case 'lighting':
+        entries.push({
+          key: 'lighting',
+          value: userLighting ?? '光影与画面1一致',
+          source: userLighting
+            ? gp.frame_field_source_user
+            : gp.frame_field_source_auto,
+        });
+        break;
+      case 'science':
+        entries.push({
+          key: 'science',
+          value: userScience ?? '主体结构继承前格',
+          source: userScience
+            ? gp.frame_field_source_user
+            : gp.frame_field_source_auto,
+        });
+        break;
+      default:
+        break;
+    }
+  }
+
+  return entries;
+}
+
 function stripMotionAndSound(description: string): string {
   if (!description) return description;
   let result = description;
@@ -411,7 +459,7 @@ function stripMotionAndSound(description: string): string {
   // Remove sound descriptions
   result = result.replace(/[^，。；。]*声[^，。；。]*[，。；\s]*/g, (match) => {
     // Don't remove if it's visual, only remove auditory descriptions
-    if (/风声|水声|脚步声|钢琴|音乐|BGM|鸣叫|低鸣|轻响|啄食声|拨水声|车流声|钢琴|配乐|背景乐|轻拍声|飞溅声|笑声|说话|说道|语气|语速/.test(match)) {
+    if (/风声|水声|脚步声|钢琴|音乐|BGM|鸣叫|低鸣|轻响|啄食声|拨水声|车流声|钢琴|配乐|背景乐|轻拍声|飞溅声|笑声|说话|说道|语气|语速|仪器声|提示音|讲解/.test(match)) {
       return '';
     }
     return match;
@@ -430,31 +478,6 @@ function stripMotionAndSound(description: string): string {
 
   return result;
 }
-      case 'emotion':
-        entries.push({
-          key: 'emotion',
-          value: userEmotion ?? gp.frame_default_emotion,
-          source: userEmotion
-            ? gp.frame_field_source_user
-            : gp.frame_field_source_auto,
-        });
-        break;
-      case 'facing':
-        entries.push({
-          key: 'facing',
-          value: userFacing ?? gp.frame_default_facing,
-          source: userFacing
-            ? gp.frame_field_source_user
-            : gp.frame_field_source_auto,
-        });
-        break;
-      default:
-        break;
-    }
-  }
-
-  return entries;
-}
 
 export function buildGridPrompt(
   rules: GridPromptRules,
@@ -464,29 +487,73 @@ export function buildGridPrompt(
   const gp = rules.grid_prompt;
   const parts: string[] = [];
 
-  // 0. Minimal header: grid + aspect ratio + anti-layout lock
   const altRows = context.cols;
   const altCols = context.rows;
+
+  // 0. Persona (professional role — orients the model toward pro photography)
+  if (gp.persona) {
+    parts.push(gp.persona);
+    parts.push('');
+  }
+
+  // 1. Global header: grid + 科学呈现旅程/主体锚定 (fallback to minimal header)
   parts.push(fillPlaceholders(
-    '生成一张{aspect_ratio}真实照片级图像。画面包含恰好{total}个等大的{cell_aspect_ratio}竖幅画面，按{cols}列×{rows}行排列，白色细边间距。所有画面同一场景、同一角色。' +
-    `【布局铁律】严格按{cols}列×{rows}行排列。上面一横排{cols}格从左到右，下面一横排{cols}格从左到右。绝对禁止改为${altRows}行×${altCols}列排列（该排列会使画面裁切变形，直接视为废图）。`,
+    gp.global_header ||
+      '生成一张{aspect_ratio}真实照片级图像。画面包含恰好{total}个等大的{cell_aspect_ratio}画面，按{cols}列×{rows}行排列，白色细边间距。所有画面同一场景、同一角色。',
     context
   ));
   parts.push('');
 
-  // 1. Reference image priority (only when ref images present)
+  // 2. 布局铁律 (anti-transpose lock — always present, critical)
+  parts.push(fillPlaceholders(
+    '【布局铁律】严格按{cols}列×{rows}行排列。上面一横排{cols}格从左到右，下面一横排{cols}格从左到右。绝对禁止改为' +
+      `${altRows}行×${altCols}列` +
+      '排列（该排列会使画面裁切变形，直接视为废图）。',
+    context
+  ));
+  parts.push('');
+
+  // 3. Grid layout (规则G — positive grid statement)
+  if (gp.grid_layout) {
+    parts.push(fillPlaceholders(gp.grid_layout, context));
+    parts.push('');
+  }
+
+  // 4. Reference image priority (only when ref images present)
   if (context.hasAnyRefImage) {
     parts.push(fillPlaceholders(gp.reference_image_priority, context));
     parts.push('');
   }
 
-  // 2. No-text constraint
-  if (context.disableTextInImage) {
+  // 5. Cinematic quality (科普光影 + 质感)
+  if (gp.cinematic_quality) {
+    parts.push(fillPlaceholders(gp.cinematic_quality, context));
+    parts.push('');
+  }
+
+  // 6. Subject continuity (主体连续)
+  if (gp.continuity_and_axis) {
+    parts.push(fillPlaceholders(gp.continuity_and_axis, context));
+    parts.push('');
+  }
+
+  // 7. Close-up subject anchor (特写主体锚)
+  if (gp.closeup_axis_lock) {
+    parts.push(fillPlaceholders(gp.closeup_axis_lock, context));
+    parts.push('');
+  }
+
+  // 8. No-text constraint
+  if (context.disableTextInImage && gp.disable_text_in_image_text) {
     parts.push(gp.disable_text_in_image_text);
     parts.push('');
   }
 
-  // 3. Frame descriptions (no per-frame quality suffix — added globally below)
+  // 9. Frame descriptions
+  if (gp.section_frames) {
+    parts.push(gp.section_frames);
+    parts.push('');
+  }
   context.frames.forEach((frame) => {
     const title = fillFramePlaceholders(gp.frame_title_template, context, frame);
     parts.push(title);
@@ -498,18 +565,24 @@ export function buildGridPrompt(
     parts.push('');
   });
 
-  // 4. Layout lock (repeated at end for recency — highest priority)
+  // 10. Hard constraints (recency — reinforces 主体/结构/尺度/合规)
+  if (gp.hard_constraints && gp.hard_constraints.length > 0) {
+    parts.push(gp.hard_constraints.map((c) => fillPlaceholders(c, context)).join('\n'));
+    parts.push('');
+  }
+
+  // 11. Layout lock (repeated at end for recency — highest priority)
   parts.push(fillPlaceholders(
     '【最终布局确认 — 比上面所有描述优先级更高】' +
-    `画面必须是{cols}列×{rows}行 = {cols}个竖列。${altRows}行×${altCols}列排列 = 废图。` +
-    '如果你排列错了，请删除图片并重新按{cols}列×{rows}行生成。',
+      `画面必须是{cols}列×{rows}行 = {cols}个竖列。${altRows}行×${altCols}列排列 = 废图。` +
+      '如果你排列错了，请删除图片并重新按{cols}列×{rows}行生成。',
     context
   ));
   parts.push('');
 
-  // 5. Global quality line (once for the whole grid, not per frame)
-  if ((gp as any).frame_quality_suffix) {
-    parts.push((gp as any).frame_quality_suffix);
+  // 12. Global quality line (once for the whole grid, not per frame)
+  if (gp.frame_quality_suffix) {
+    parts.push(gp.frame_quality_suffix);
   }
 
   return parts.join('\n');

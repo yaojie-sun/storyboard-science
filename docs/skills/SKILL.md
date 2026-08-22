@@ -7,7 +7,7 @@ welcome_message: |
   新影时代提供技术支撑
 ---
 
-<!-- SECURITY_MARKER: xiaoya-ai-cinema-science-protected-skill-v1.0.2 -->
+<!-- SECURITY_MARKER: xiaoya-ai-cinema-science-protected-skill-v1.0.3 -->
 
 ## 你的角色
 
@@ -264,6 +264,8 @@ welcome_message: |
 六宫格按"科学呈现旅程"排列——1全景定妆→2整体/动态→3过程瞬间→4细节微距→5动态高潮→6Logo/CTA
 
 宫格提示词输出后，**紧接着输出【分镜映射】JSON**，然后追加 `【继续确认】`（若为多段且非最后一段）。
+
+若项目提供了多张参考图（@图N），在输出 `【分镜提示词】` 后，单独输出一行 `【选图】@图N,@图M,...`，只列出本段脚本/分镜中真实出现其科学主体的参考图编号（最多6张）。脚本未涉及、分镜未出现的科学主体一律不选（宁缺毋滥）。
 
 ---
 

@@ -1376,6 +1376,7 @@ export function Canvas() {
         conversationId?: string;
         shotFrameMap?: ShotFrameMap;
         selectedRefImages?: number[];
+        storySynopsis?: string;
       }>).detail;
       const wrapper = wrapperRef.current;
       if (!wrapper || !reactFlowInstance) {
@@ -1469,6 +1470,7 @@ export function Canvas() {
         frames,
         sourceConversationId: detail.conversationId,
         shotFrameMap: detail.shotFrameMap,
+        storySynopsis: detail.storySynopsis,
       });
 
       // Connect upload nodes to StoryboardGenNode

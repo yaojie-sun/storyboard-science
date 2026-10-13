@@ -79,7 +79,8 @@ src-tauri/resources/ffmpeg/
 
 # Exclude old release notes and dev docs (contain credential patterns)
 docs/xiugai*.md
-docs/shengji.md
+# 但本版的发版 SOP 要进版本库（与服饰/旅游/短视频版一致：那边的 docs/shengji.md 都是跟踪的）
+!docs/shengji.md
 docs/modules.md
 docs/plans/
 docs/releases/

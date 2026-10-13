@@ -133,7 +133,10 @@ export function UpdateAvailableDialog({
         {notes && !downloading && (
           <div className="mt-3 rounded border border-border-dark bg-bg-dark p-3">
             <p className="mb-1 text-xs font-medium text-text-dark">{t('update.releaseNotes')}</p>
-            <pre className="whitespace-pre-wrap text-xs text-text-muted leading-5">{notes}</pre>
+            {/* 限高：UiModal 正文区无 max-height/overflow，日志过长会把下载按钮顶出屏幕。
+                38vh + 弹窗其余固定内容 ≈ 470–550px，最小窗口 600px 下按钮仍可见。
+                服务端 notes 本身也应 ≤300 字（见 docs/shengji.md §八）。 */}
+            <pre className="max-h-[38vh] overflow-y-auto ui-scrollbar whitespace-pre-wrap text-xs text-text-muted leading-5">{notes}</pre>
           </div>
         )}
       </div>

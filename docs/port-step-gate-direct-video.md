@@ -1,9 +1,9 @@
-# 跨版本移植说明 — STEP 门机 + 直出视频 + 对话文件防护 + 停靠小窗 + 单档定价
+# 跨版本移植说明 — STEP 门机 + 直出视频 + 对话文件防护 + 停靠小窗 + 单档定价 + 按条计费
 
 > **基线版本**：小鸭分镜大师 · 短视频版（`D:\Story-ShortVideo`，分支 `aishi-dev`）
 > **基线状态**：已发布至 **v1.0.79**（v1.0.78 = 门机协议 + 直出视频 + 停靠小窗 + 720P 单档定价；v1.0.79 = 升级弹窗日志限高）
 > **目标版本**：服饰版 / 科普版 / 萌宠版 / 美妆版 / 大健康版 / 旅游版 等全部垂直版本
-> **整理日期**：2026-10-13（第八批 + 第九批为发布后追记）
+> **整理日期**：2026-10-13（第八批 + 第九批为发布后追记；第十批为美妆版复刻走偏的回灌）
 > **一句话**：写手流程从「AI 自己问用户 A/B/G/X」改成「**前端持有光标 + 界面给选项卡**」，
 > 并把 chat 页的「直接生成视频」做成一条完整链路。
 
@@ -37,8 +37,12 @@
 4. 改 SKILL.md 旧话术（§3.3）      ← 清掉残留的 L1/L2/L3
 5. 改 Rust 供应商/命令（§3.4）
 6. 改规则 JSON（§3.5）
-7. 跑 §5 验证清单
+7. 套第十批三件（§3.15）：视频页「删超分按钮 + 自动 2K」→ 视频定价两处对齐 → 消费清单去噪
+   ⚠️ 按条计费的**服务端价目必须先上**（§3.15.3），再合客户端那 1 行
+8. 跑 §5 验证清单
 ```
+
+> 十一批之后的顺序都写在各自小节里；**唯一有硬时序的是 §3.15.3（服务端先、客户端后）**。
 
 ### 0.3 绝对不要动（违反 = 生产事故）
 
@@ -100,6 +104,13 @@
 | `src/components/UpdateAvailableDialog.tsx` | 改（第八批） | 升级弹窗日志区限高可滚（`max-h-[38vh] overflow-y-auto ui-scrollbar`） | 见 §3.13 |
 | `docs/releases/v1.0.79.md` | **新增**（第八批） | v1.0.79 更新日志（单条） | 按版本写 |
 | ——（运维，无代码） | 第九批 | 发布/升级链路四条硬规则 + 远端实况 | 见 §3.14 |
+| `src/features/videoGeneration/VideoGenDialog.tsx` | 改（第十批） | 删三个超分按钮 + 两个确认弹窗；生成后**自动本地超分到 2K** | 见 §3.15.2 |
+| `src/features/videoGeneration/videoPricing.ts` | 改（第十批） | 定价对齐基线 3 积分/秒（美妆版曾「保留自有档位」，**不要照抄那种做法**） | 见 §3.15.1 |
+| `src-tauri/src/commands/banana_api.rs` | 改（第十批） | `base_credits` 同上；兜底 `other * 3` | 见 §3.15.1 |
+| `src/i18n/locales/{zh,en}.json` | 改（第十批） | `videoGen.generate` → `生成视频（2K）` / `Generate Video (2K)` | 见 §3.15.2 |
+| `src/stores/chatStore.ts` | 改（第十批） | 自动串链的续步带 `prompt_continue`（网关侧 0 积分） | 见 §3.15.3 |
+| `src/components/ConsumptionHistoryDialog.tsx` | 改（第十批） | 用户侧清单隐藏 0 分流水 | 见 §3.15.4 |
+| ——（服务端，无仓内文件） | 第十批 | 网关价目加 `prompt_continue = 0` + 运维两条 | 见 §3.15.3 / §3.15.5 |
 
 ---
 
@@ -854,6 +865,141 @@ videoGen.estimateHint
 
 ---
 
+### 3.15 第十批：提示词按条计费 + 视频页/定价一律照基线 + 消费清单去噪
+
+**这一批是「美妆版复刻时走偏」的回灌**。走偏的三处，当初都被当成了「各版本可自行决定」；
+本批的重点因此不是代码量，而是**取消这些自由度**：视频页与视频定价属**协议层**，不属 `§4` 的产品语境定制。
+
+#### 3.15.1 🔴 视频页与视频定价：不许「保留各版本自有档位」
+
+| 走偏做法（美妆版实测） | 后果 | 正解 |
+|---|---|---|
+| 定价保留自有六档 `{4:35,6:45,8:55,10:65,12:78,15:93}`、兜底 `other * 6.2` | 同一模型跨版本价差近 2 倍，用户对不上账 | **一律 3 积分/秒**（§3.12 表），兜底 `other * 3`；`videoPricing.ts` 与 `banana_api.rs` **两处必须同改** |
+| 保留「云端 2K / 云端 4K / 本地 4K」三个超分按钮 + 两个确认弹窗 | 交互与基线分叉，用户看到「生成完还得自己点超分」 | **全删**，照基线改「生成完成后**自动**本地超分到 2K」（见 §3.15.2） |
+
+**只有一处要按仓确认**：该仓的 1080P 选择器是**隐藏**还是**开着**（§3.12 坑 1）—— 开着就是真的在卖 1080P，
+不能照抄本仓表。其余一律照基线。
+
+#### 3.15.2 删掉超分按钮，改为「生成完成后自动本地超分到 2K」
+
+**只删 UI，不删后端**：`baidu_upscale_video`（云端 2K/4K，20/35 积分）保留，与基线一致 —— 只是不再从视频页按钮进入。
+改动集中在一个文件：`src/features/videoGeneration/VideoGenDialog.tsx`（基线同名变量逐字相同，可整段照抄）。
+
+**① 先加 `autoEnhanceTo2K`**（基线对应函数的整段）：内部 `await enhanceVideo(localVideoPath, 2)`，
+**失败回退原片**（不抛、不阻塞出片），并驱动既有的 `isLocalEnhancing` / `localEnhanceProgress` 蒙版
+（进度是**模拟**的：0→90% 约 3 分钟，2500ms 一跳）。**不要**把它加进 `handleGenerate` / `startPolling` 的依赖数组（基线也没加）。
+
+**② 两个调用点各插 3 行，并改掉落盘入参**：
+
+| 路径 | 由 | 改为 |
+|---|---|---|
+| 轮询路径 | `config.videoUrl = localVideoPath` | `const finalVideoPath = await autoEnhanceTo2K(localVideoPath)` → `videoUrl` 与 `generatedVideoUrl` 都用 `finalVideoPath` |
+| 同步路径 | 同上（变量名 `syncVideoPath`） | 同上 |
+
+**③ 再删**（**自下而上**删，别从上往下）：
+
+| 内容 |
+|---|
+| 三个按钮：`云端 2K (-20积分)` / `云端 4K (-35积分)` / `本地 4K (免费)` |
+| 两个确认弹窗（云端超分确认 / 本地 4K 硬件要求确认，含「以后不再提示」checkbox 与 localStorage 读写） |
+| 状态 `showLocalEnhanceConfirm` / `isUpscaling` / `upscaleTarget` / `showUpscaleConfirm` / `enhanceSuppressVideoConfirmRef` |
+| `handleLocalEnhance` 整个函数（已被 `autoEnhanceTo2K` 取代） |
+| 预览区「生成中」文案里的 `isUpscaling` 分支与两处前缀（删完与基线逐字相同） |
+| import 里的 `UiButton`（恢复基线 `import { UiModal, UiChipButton } from '@/components/ui';`） |
+
+**保留**：`isLocalEnhancing` / `localEnhanceProgress`、进度蒙版、`enhanceVideo` import（新函数仍在用）。
+⚠️ **孤儿 localStorage 键 `enhance:suppressVideoConfirm` 不要顺手删**——删就是动用户数据（§12.4-3）。
+
+⚠️ **顺序陷阱（先查该仓 tsconfig 再动）**：许多仓开了 `noUnusedLocals` + `noUnusedParameters`
+⇒ **必须先把 `autoEnhanceTo2K` 接上、再去删旧 UI**，否则中间态会因「已声明未使用」直接编译失败。
+删完必须再跑一次 `tsc`；残留关键字自查（应为空）：
+`grep -rn "isUpscaling\|upscaleTarget\|showUpscaleConfirm\|showLocalEnhanceConfirm\|enhanceSuppressVideoConfirmRef" src/`
+
+**④ i18n（两处，别误伤）**：
+
+- 生成按钮：`videoGen.generate` → `生成视频（2K）` / `Generate Video (2K)`（`zh.json` / `en.json` 同改）
+- 组件内 fallback 字面量同步：`t('videoGen.generate', '生成视频（2K）')`
+- 🔴 **不要动** `node.videoGen.generate`（节点卡片标签，各版本本来就相同）
+
+**⑤ 成片源变了（必须同步告知产品侧）**：`videoUrl` / `generatedVideoUrl` 从此指向**本地 2K 文件**，
+节点缩略图 / 下载 / 历史记录一并变 2K。用户感知是「生成完还要再等 2-5 分钟」。**窗口期风险**：
+`autoEnhanceTo2K` 在 `saveConfig` **之前** await ⇒ 这 2-5 分钟内本次成功结果尚未入库；
+但 `pendingTaskId` 更早就已落盘，重开节点会续接轮询、重下重超分 ⇒ 属「窗口期」而非「必丢」。
+
+**⑥ §12.4 冻结区自查（要求空输出）**：
+
+```bash
+git diff -U0 -- src/features/videoGeneration/VideoGenDialog.tsx \
+  | grep -E "^\+.*(saveConfig\(|addToHistory\(|forcePersistVideoGen\(|hydrateVideoGenStore|configs\[nodeId])"
+```
+
+两个调用点的函数、时机、字段结构、`if (nodeIdRef.current)` 包裹、`forcePersistVideoGen` 位置**全不变**，
+唯一变化是入参 `config.videoUrl` 的**取值来源**；被删的持久化调用点全属被删除的功能（属「删调用点」而非「改链路」）。
+
+#### 3.15.3 提示词计费：一条提示词 = 1 积分（不是每步 1 分）
+
+**症状**：一条完整提示词在消费清单里出现 **8 行「提示词生成 −1」**，观感是每一步都扣 1 分。
+**成因**：写手链一条提示词 = **8 次网关调用**（`chatStore.ts` 的 MAIN_CHAIN STEP0…STEP6 + 自动串链），每步独立计费。
+**客户端在这条链路上没有任何扣费代码** —— 钱在**自有网关**按请求体 `billing_tag` 扣
+（无标记走 token 阶梯，每步落一条 `action_type=text_generation`）。
+
+| 侧 | 改动 |
+|---|---|
+| **服务端** | `/jy/backend/app/api/endpoints/gateway.py` 的 billing_tag 分支新增 `elif billing_tag == "prompt_continue": required_credits = 0`（照抄旁边 `inspiration_continue` 的写法），并把该字段的 `description` 补一句 |
+| **客户端** | 三仓各 **1 行**：`src/stores/chatStore.ts` 自动串链处 `sendMessage(nextAnchor, undefined, { auto: true })` → `'prompt_continue'` |
+
+用户**手动**发起的三个入口**保持无标记**（各扣 1 分）：`ChatInput.tsx`（输入框，💡爆款灵感另带 `inspiration`）、
+`ChatPanel.tsx`（阶段卡片）、`FillGridButtons.tsx`（宫格分镜）。⇒ 恰好等于「一条提示词 1 分」。
+
+🔴 **时序：服务端价目先上，客户端后发。**
+⚠️ **但本网关的失败模式比预想温和**：未知 tag 落 `else` 分支 ⇒ 走 token 阶梯计费（**会被正常扣分**），
+既不白送也不断链。**换网关实现时必须重新确认这一条** —— 若某实现是「未知 tag 报错」或「按 0 计费」，
+先发客户端的后果就分别是**断链**或**白送**。
+
+**Rust 不用改**：`chat.rs` 原样透传 tag。⚠️ 特别地，`intercept_search_and_continue` 里那个 `continue_tag`
+（`Some("inspiration") → inspiration_continue`，`_ => None`）**不要给它加 `prompt_continue` 分支** ——
+它只服务灵感链（`<search>` 全仓只存在于该拦截器自身），写手链走不到。
+
+**残留（本次未修）**：美妆/科普的 `chat.rs::call_gateway_once` 有 `MAX_ATTEMPTS = 2` 空响应重发
+（**短视频基线没有**）—— 首步（无标记）重发会**多扣 1 分**；续步带标记后重发已免费。
+根治需服务端加「同一逻辑请求重发不重复计费」+ 客户端带 `prompt_retry`，属独立一步。
+
+#### 3.15.4 消费清单隐藏 0 分流水
+
+网关为每次调用都写一条流水（`credit_consumption_logs`），续步的 0 分记录会在用户侧清单堆成一串 `-0`。
+**在用户侧过滤、账本保留**（改 `src/components/ConsumptionHistoryDialog.tsx` 的 `filteredRecords`，加一行谓词）：
+
+```ts
+if (r.credits_consumed === 0) return false;
+```
+
+选客户端过滤而非服务端：流水留着才能对账，管理端仍看全量。
+副作用：底部「加载更多 (n/total)」的计数取自原始条数（含被隐藏的 0 分），比实际看到的行数大。
+
+#### 3.15.5 服务端运维两条（动网关文件前必读）
+
+1. **网关价目文件的真实位置**：`/jy/backend/app/api/endpoints/gateway.py`
+   （`claude-gateway.service` → `/jy/main.py` 把 `backend.app.api.endpoints.gateway` 挂在 `/api/v1/gateway`）。
+   ⚠️ **不是**客户端仓里那个 Streamlit 后台（`jiaoyan/`）—— 那份**完全没有 `billing_tag` 逻辑**，改它没有任何效果。
+2. **两个会咬人的自动化**（都在 `/jy/watchdog.sh`，cron `*/3 * * * *`）：
+   - `protect_files()` 把 `gateway.py` / `main.py` **强制 chmod 444** ⇒ 改文件要 `chmod u+w` → 改 → **改回 444**。
+   - **Level 3 会从 `/jy/backups/stable/<最新>/backend/` 整目录回滚**（`rm -rf` 后覆盖）。
+     最新稳定备份若早于你的改动，网关一旦连续不可用就会把这次价目**静默回滚**。
+     ⇒ 改完网关文件，**把改后的文件同步进当前稳定备份目录**，或至少记下风险与回退点。
+
+**改网关后的验证**：
+
+```bash
+systemctl restart claude-gateway && sleep 10
+systemctl is-active claude-gateway                    # active
+curl -s -o /dev/null -w "%{http_code}\n" -X POST -H 'Content-Type: application/json' \
+  -d '{"username":"healthcheck","password":"healthcheck"}' \
+  http://127.0.0.1:3003/api/v1/auth/login             # 401（看门狗同款探针）
+journalctl -u claude-gateway --since '2 min ago' | grep 计费   # 逐次调用的 tag 与扣分数
+```
+
+---
+
 ## 4. 各垂直版本的定制点（只需改这些）
 
 移植时**只有下面几处**需要按版本改写，其余全部原样：
@@ -868,7 +1014,8 @@ videoGen.estimateHint
 | 6 | `video_gen_rules_minimax_h3{,_direct}.json` | **线上已是产品中立**（六段式官方格式：`短视频`/`科普`/`导演`/`摄影师` 均 0 处命中），无需按版本改产品词 | **通常原样复用线上文件** —— `update.rs` 的 `mode` 分键已足够。若某仓确实要换规则头，**必须用本仓专属文件名**上传，否则会覆盖其他版本共享的同一份线上文件（2026-10-13 实测：这两份是跨版本共享的） |
 | 7 | `nodeDisplay.ts` 默认名 | `直出视频` | 可保留 |
 | 8 | `docs/skills/version.txt` 的 `name:` | `xiaoya-ai-cinema-shortvideo` | 各版本自己的 skill 名 |
-| 9 | 视频定价（§3.12） | 720P 单档 · 3 积分/秒（15 秒 = 45） | 按各行当定价改，**两处必须同改**：`videoPricing.ts` 与 `banana_api.rs` 的 `base_credits`。改之前先确认该仓的 1080P 选择器是**隐藏**还是**开着**（§3.12 坑 1）—— 开着就是真的在卖 1080P，不能照抄本仓表 |
+| 9 | 视频定价 + 视频生成页（§3.12 / §3.15） | 720P 单档 · 3 积分/秒（15 秒 = 45）；生成完**自动**本地超分到 2K | 🔴 **照基线，本项不设自由度**：定价与视频页属**协议层**。两处（`videoPricing.ts` + `banana_api.rs`）必须同改；**不许「保留本版本自有档位」，也不许留着旧的超分按钮**（美妆版走过这条路，见 §3.15.1）。唯一要按仓确认的是该仓的 1080P 选择器是**隐藏**还是**开着**（§3.12 坑 1）—— 开着就是真的在卖 1080P，不能照抄本仓表 |
+| 10 | 提示词计费额度（§3.15.3） | 一条提示词 1 积分（续步 0 分，网关 `prompt_continue`） | 🔴 **原样**（属 §12.2 计费，改额度需单独审批） |
 
 ---
 
@@ -883,6 +1030,13 @@ cd src-tauri && cargo check      # Rust 零错误
 # 旧话术残留检查 —— 命中的每一处上下文都应带「禁止/不要/不再输出」
 grep -n 'G-生成\|X-修改分段\|A-生成\|B-不生成\|继续-生成下一段\|【继续确认】' docs/skills/SKILL.md
 grep -n 'G-生成\|A-生成\|B-不生成\|继续' src-tauri/src/commands/chat.rs   # 应为空
+
+# 超分按钮残留（第十批，应为空）
+grep -rn "isUpscaling\|upscaleTarget\|showUpscaleConfirm\|showLocalEnhanceConfirm\|enhanceSuppressVideoConfirmRef" src/
+
+# §12.4 冻结区（第十批涉及视频弹窗时必跑，应为空）
+git diff -U0 -- src/features/videoGeneration/VideoGenDialog.tsx \
+  | grep -E "^\+.*(saveConfig\(|addToHistory\(|forcePersistVideoGen\(|hydrateVideoGenStore|configs\[nodeId])"
 ```
 
 ### 5.2 端到端（**只能用测试账号**，会消耗积分）
@@ -916,6 +1070,13 @@ grep -n 'G-生成\|A-生成\|B-不生成\|继续' src-tauri/src/commands/chat.rs
    `STEP6`、`STEP7/9` 与**每个会话的第一条消息**应≈**7 万**（带 `全量注入` 行或没有瘦身行）。
    若所有轮次都是 7 万且带 warn「技能瘦身未生效」⇒ 本地技能是旧包（没有标记），
    但**不做任何事也是安全的**（fail-open，全量注入）。
+10. **自动 2K（第十批）**：生成一条视频 ⇒ 生成完出现本地超分进度蒙版（0→90% 是**模拟**的，约 2-5 分钟）
+    ⇒ 成片为 2K，且**节点缩略图 / 下载 / 历史记录拿到的都是 2K 文件**；超分失败时**回退原片、不阻塞出片**。
+    视频页**不再出现**「云端 2K / 云端 4K / 本地 4K」三个按钮；按钮文案为「生成视频（2K）」。
+11. **按条计费（第十批）**：贴一次脚本走完 STEP0→STEP6 ⇒ 消费清单里应只剩
+    **1 行「提示词生成 −1」**（其余 0 分流水已被隐藏）；再点「生成宫格分镜」⇒ 再 +1 行 −1。
+    网关日志同轮应见 1 条 `[计费-messages] … 扣分=1` + 7 条 `[计费-提示词续写] 0积分`。
+    再关闭并重开该节点的视频页，所见与生成时一致（§12.4 底线）。
 
 ### 5.3 日志检查
 
@@ -971,6 +1132,9 @@ grep -n 'G-生成\|A-生成\|B-不生成\|继续' src-tauri/src/commands/chat.rs
 | **停靠小窗（✅ 已执行，见 §3.11）** | 视频生成弹窗「缩小 → 右侧停靠小窗 + 完成提示条」。⚠️ 移植时**每仓必须重算两处**：缩小时的浮层清理 setter 列表（各仓 `useState` 数量不同，照抄会编译失败）、`estimateHint` 文案（各仓耗时不同） |
 | **`UiModal` 正文区全局限高（第八批只修了一处）** | §3.13 是**局部**修法（只给升级弹窗的日志框加 `max-h`）。`src/components/ui/primitives.tsx:492` 的正文区仍是裸 `<div>`，其他正文可能变长的弹窗同样会被顶出按钮。根治要给 `UiModal` 加 `max-h` + 滚动 —— 属**全局行为变更**，各版本一起评估后再动 |
 | 视频定价（✅ 已执行，见 §3.12） | 720P 单档 · 3 积分/秒。⚠️ 移植时**每仓必须重算一处**：先确认该仓的 1080P 选择器是隐藏还是开着（藏着才能照抄本仓表） |
+| **首步空响应重发的重复扣费（第十批残留）** | 美妆/科普的 `chat.rs::call_gateway_once` 有 `MAX_ATTEMPTS = 2`（**短视频基线没有**）：首步（无标记）重发会**多扣 1 分**。根治需服务端「同一逻辑请求重发不重复计费」+ 客户端 `prompt_retry` 标记，属独立一步 |
+| **0 分流水持续写入（第十批）** | 每条提示词多写 7 行 0 分记录（`credit_consumption_logs`），长期纯增长。若嫌涨，可让服务端在 `required_credits == 0` 时不写流水——会失去对账明细，需权衡后再动 |
+| **网关价目与稳定备份不同步（第十批）** | `/jy/backups/stable/` 里最新那份还是**改前**的 `gateway.py`；看门狗 Level 3 一旦触发会静默回滚 `prompt_continue` 价目（见 §3.15.5）。要么把改后文件同步进备份目录，要么把这条风险显式记在运维侧 |
 
 ---
 

@@ -1188,7 +1188,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         window.setTimeout(() => {
           const s = useChatStore.getState();
           if (!s.autoChain || s.isStreaming) return;
-          void s.sendMessage(nextAnchor, undefined, { auto: true });
+          // 自动串链的续步统一带 `prompt_continue`：自有网关按此标记计 0 积分
+          // （价目见服务器 `backend/app/api/endpoints/gateway.py` 的 billing_tag 分支）。
+          // 一条提示词 = 8 次网关调用（STEP0→STEP6 自动串链），只该按第一步收 1 分。
+          void s.sendMessage(nextAnchor, 'prompt_continue', { auto: true });
         }, 0);
       }
     } catch (error) {

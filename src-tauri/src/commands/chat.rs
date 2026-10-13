@@ -9,8 +9,13 @@ const SKILL_VERSION_URL: &str = "https://aixiaoxi.top/jy/uploads/install_guide/f
 
 const GATEWAY_MESSAGES_URL: &str = "https://aixiaoxi.top/jy/api/v1/gateway/v1/messages";
 const CHAT_MODEL: &str = "claude-sonnet-4-6";
-const CHAT_MAX_TOKENS: u32 = 8192;
-const ANALYSIS_MODEL: &str = "deepseek-v4-flash";
+const CHAT_MAX_TOKENS: u32 = 16384;
+/// 分镜分析模型 —— 与读图统一为官方名 `deepseek-flash`。
+///
+/// ⚠️ 这个名字**走自有网关**（`GATEWAY_MESSAGES_URL`），网关必须认它。
+/// 写手的 `CHAT_MODEL` / 提示词优化的 `OPTIMIZE_MODEL` 用的是网关**自有别名**
+/// `claude-sonnet-4-6`，不受官方改名约束，**不要一起改**（改了会断链）。
+const ANALYSIS_MODEL: &str = "deepseek-flash";
 const ANALYSIS_MAX_TOKENS: u32 = 2048;
 
 // ─────────────────────────── 写手规则块（writer_rules/） ───────────────────────────
@@ -279,6 +284,64 @@ fn extract_openai_text(response: &serde_json::Value) -> String {
         .to_string()
 }
 
+/// 单次网关往返（Anthropic Messages 形状）——返回（可见文本, 完整响应 JSON）。
+///
+/// 🔴 正文为空时**不在这里报错**，由调用方决定要不要重发：
+///    `stop_reason=max_tokens` + 空文本是**可重试**的（上游把输出预算烧在思考里），
+///    而内容过滤造成的空响应重发也是同一结果、白花一次调用。
+///
+/// 抽出来只为让「重试一次」这件事只写一遍；请求形状与本函数出现之前**逐字一致**。
+async fn call_gateway_once(
+    client: &reqwest::Client,
+    api_key: &str,
+    system_prompt: &str,
+    messages: &[ChatMessageDto],
+    max_tokens: u32,
+    billing_tag: Option<String>,
+) -> Result<(String, serde_json::Value), String> {
+    let request_body = ChatRequest {
+        model: CHAT_MODEL.to_string(),
+        system: system_prompt.to_string(),
+        messages: messages.to_vec(),
+        max_tokens,
+        stream: false,
+        billing_tag,
+    };
+
+    let response = client
+        .post(GATEWAY_MESSAGES_URL)
+        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Content-Type", "application/json")
+        .json(&request_body)
+        .send()
+        .await
+        .map_err(|e| format!("网关请求失败: {}", e))?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        let err_msg = format!("网关返回错误 ({}): {}", status, body);
+        warn!("[Chat] {}", err_msg);
+        return Err(err_msg);
+    }
+
+    let response_json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("解析响应 JSON 失败: {}", e))?;
+
+    let text = {
+        let anthropic_text = extract_anthropic_text(&response_json);
+        if !anthropic_text.is_empty() {
+            anthropic_text
+        } else {
+            extract_openai_text(&response_json)
+        }
+    };
+
+    Ok((text, response_json))
+}
+
 #[tauri::command]
 pub(crate) async fn chat_send_message(
     messages: Vec<ChatMessageDto>,
@@ -428,59 +491,75 @@ pub(crate) async fn chat_send_message(
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
 
-    let request_body = ChatRequest {
-        model: CHAT_MODEL.to_string(),
-        system: system_prompt.clone(),
-        messages: messages.clone(),
-        max_tokens: CHAT_MAX_TOKENS,
-        stream: false,
-        billing_tag: billing_tag.clone(),
-    };
-
-    let response = client
-        .post(GATEWAY_MESSAGES_URL)
-        .header("Authorization", format!("Bearer {}", api_key))
-        .header("Content-Type", "application/json")
-        .json(&request_body)
-        .send()
-        .await
-        .map_err(|e| format!("网关请求失败: {}", e))?;
-
-    let status = response.status();
-    if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        let err_msg = format!("网关返回错误 ({}): {}", status, body);
-        warn!("[Chat] {}", err_msg);
-        return Err(err_msg);
-    }
-
-    let response_json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("解析响应 JSON 失败: {}", e))?;
-
-    let text = {
-        let anthropic_text = extract_anthropic_text(&response_json);
-        if !anthropic_text.is_empty() {
-            anthropic_text
+    // 🔴 **空响应原样重发一次**（用户反馈：写手明明能出，却报
+    //    「写手这一轮没有返回内容（stop_reason=max_tokens）」）。
+    //
+    //    实测成因：这类空响应**不是上游真没内容**，而是输出预算被思考吃光 ——
+    //    2026-10-13 实测 `stop_reason=max_tokens` 且 `output_tokens` **正好等于**
+    //    `CHAT_MAX_TOKENS`、`content[0].text` 是空串。同一轮重发通常就能收敛。
+    //    这一轮对用户是**纯亏损**：已计费、产物为空、链条停在原地，用户只能重贴脚本
+    //    ⇒ 整条链从 STEP1 重跑（8 次调用）。所以这里直接重发，不把这个错推给用户手动重试。
+    //
+    //    ⚠️ 重发**不推进链条、不落盘**：只有真拿到正文才会走下面的 `Ok(ChatResponse …)`，
+    //       失败的那一轮前端什么也收不到（`Err`）⇒ 不会记 `stage`、不会续下一环。
+    const MAX_ATTEMPTS: usize = 2;
+    let mut text = String::new();
+    let mut response_json: serde_json::Value = serde_json::Value::Null;
+    for attempt in 1..=MAX_ATTEMPTS {
+        // 重发（attempt ≥ 2）改带 `prompt_retry`：**同一逻辑步骤的重发不该二次计费**。
+        // 首步无标记、走 token 阶梯计费，照原标记重发会被再扣一次（这里就是要修的那次）；
+        // 续步本就带 `prompt_continue`（0 分），换成 `prompt_retry` 同样 0 分。
+        // 价目见服务器 `backend/app/api/endpoints/gateway.py` 的 billing_tag 分支。
+        let attempt_tag = if attempt == 1 {
+            billing_tag.clone()
         } else {
-            extract_openai_text(&response_json)
+            Some("prompt_retry".to_string())
+        };
+        let (t, rj) = call_gateway_once(
+            &client,
+            &api_key,
+            &system_prompt,
+            &messages,
+            CHAT_MAX_TOKENS,
+            attempt_tag,
+        )
+        .await?;
+        text = t;
+        response_json = rj;
+
+        // 真实用量（上游报的 `prompt_tokens` / `completion_tokens`，由服务器
+        // `build_anthropic_response` 换算成 Anthropic 形状透传下来）——**不是估数**。
+        // 每轮都打：STEP 门机一轮要发 8 次调用，成本口径只能靠这几行实测，不能靠推算。
+        let usage = response_json
+            .get("usage")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let stop_reason = response_json
+            .get("stop_reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(未给)");
+        info!(
+            "[Chat] 响应完成 chat_id={} attempt={}/{} len={} stop_reason={} usage={}",
+            chat_id,
+            attempt,
+            MAX_ATTEMPTS,
+            text.len(),
+            stop_reason,
+            usage
+        );
+
+        if !text.is_empty() {
+            break;
         }
-    };
-
-    // 真实用量（上游报的 `prompt_tokens` / `completion_tokens`，由服务器
-    // `build_anthropic_response` 换算成 Anthropic 形状透传下来）——**不是估数**。
-    // 每轮都打：STEP 门机一轮要发 8 次调用，成本口径只能靠这几行实测，不能靠推算。
-    let usage = response_json
-        .get("usage")
-        .cloned()
-        .unwrap_or(serde_json::Value::Null);
-
-    let text_len = text.len();
-    info!(
-        "[Chat] 响应完成 chat_id={} len={} usage={}",
-        chat_id, text_len, usage
-    );
+        // ⚠️ **只重试「预算耗尽」这一种**：内容过滤 / 上游 2xx 空体重发也是同一结果。
+        if stop_reason != "max_tokens" || attempt == MAX_ATTEMPTS {
+            break;
+        }
+        warn!(
+            "[Chat] 输出预算被思考吃光（attempt={}/{}），原样重发一次 chat_id={}",
+            attempt, MAX_ATTEMPTS, chat_id
+        );
+    }
 
     if text.is_empty() {
         // 🔴 空响应**不能当成功**返回。
@@ -497,6 +576,10 @@ pub(crate) async fn chat_send_message(
             .get("stop_reason")
             .and_then(|v| v.as_str())
             .unwrap_or("(未给)");
+        let usage = response_json
+            .get("usage")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
         let raw: String = serde_json::to_string(&response_json).unwrap_or_default();
         let raw_head: String = raw.chars().take(1200).collect();
         warn!(
@@ -504,9 +587,11 @@ pub(crate) async fn chat_send_message(
             chat_id, stop_reason, usage, raw_head
         );
         return Err(format!(
-            "写手这一轮没有返回内容（stop_reason={}）。这是网关侧的空响应，不是你的输入问题，\
-             直接重发一次通常即可；若反复出现，请把这条报错原样发给我。",
-            stop_reason
+            "写手这一轮没有返回内容（stop_reason={}）。已经自动原样重发过 {} 次仍是空响应 —— \
+             这是网关侧的空响应，不是你的输入问题，手动再发一次通常即可；若反复出现，\
+             请把这条报错原样发给我。",
+            stop_reason,
+            MAX_ATTEMPTS - 1
         ));
     }
 
@@ -584,29 +669,18 @@ async fn intercept_search_and_continue(
         _ => None,
     };
 
-    let request_body = ChatRequest {
-        model: CHAT_MODEL.to_string(),
-        system: system_prompt.to_string(),
-        messages: continued_messages,
-        max_tokens: CHAT_MAX_TOKENS,
-        stream: false,
-        billing_tag: continue_tag,
-    };
-
-    let response = client
-        .post(GATEWAY_MESSAGES_URL)
-        .header("Authorization", format!("Bearer {}", api_key))
-        .header("Content-Type", "application/json")
-        .json(&request_body)
-        .send()
-        .await
-        .ok()?;
-
-    let response_json: serde_json::Value = response.json().await.ok()?;
-    let continued_text = {
-        let t = extract_anthropic_text(&response_json);
-        if !t.is_empty() { t } else { extract_openai_text(&response_json) }
-    };
+    // 续写这一路仍走同一助手（形状/额度与主路一致）；失败就当没有搜索结果，
+    // 不重试 —— 这里本来就用 `.ok()?` 容错，空响应只是丢掉搜索结果，不会伤主链路。
+    let (continued_text, _) = call_gateway_once(
+        client,
+        api_key,
+        system_prompt,
+        &continued_messages,
+        CHAT_MAX_TOKENS,
+        continue_tag,
+    )
+    .await
+    .ok()?;
 
     if continued_text.is_empty() { None } else { Some(continued_text) }
 }

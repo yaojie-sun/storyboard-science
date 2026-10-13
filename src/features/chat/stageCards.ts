@@ -290,8 +290,44 @@ export interface StageTurnLike {
 
 /** 行内第一个秒数：`S01（3.0s）` / `**[Shot 6]** 12.0s<br>34.0–46.0s` / `｜4s`。 */
 const SHOT_SECONDS_RE = /(\d+(?:\.\d+)?)\s*s/i;
+/** 括号里的显式时长：`（3.5s）` / `(3.5s)` —— 写手最常写、最不会误读的一种。 */
+const SHOT_DURATION_PAREN_RE = /[（(]\s*(\d+(?:\.\d+)?)\s*s\s*[）)]/i;
+/** 起止时刻区间：`3.5–6.5s`（时长 = 后者 − 前者）。 */
+const SHOT_DURATION_RANGE_RE = /(\d+(?:\.\d+)?)\s*s?\s*[-–—~至]\s*(\d+(?:\.\d+)?)\s*s/i;
+
+/**
+ * 一行首格里的**本镜时长（秒）**。
+ *
+ * 🔴 **不能直接取行内第一个 `Ns`** —— 写手的时长列有三种写法，其中
+ *    `Shot 1 · 0.0–3.5s（3.5s）` 这种「起–止s（时长s）」里，第一个命中的是
+ *    **结束时刻**（第二镜 `3.5–6.5s（3.0s）` 会被读成 6.5）。实测后果：15 秒的镜头表
+ *    被读成 48 秒 ⇒ 贪心切单元把「写手自己划的 1 个单元」切成 4 个
+ *    （U1 Shot 1-2 / U2 Shot 3 / U3 Shot 4 / U4 Shot 5），15 秒广告变成 4 次生成、4 个片段。
+ *    所以按 **括号时长 → 起止之差 → 行内第一个 `Ns`** 三级取。
+ */
+function readShotSeconds(head: string): number | null {
+  const paren = head.match(SHOT_DURATION_PAREN_RE);
+  if (paren) return Number(paren[1]);
+  const range = head.match(SHOT_DURATION_RANGE_RE);
+  if (range) {
+    const diff = Number(range[2]) - Number(range[1]);
+    // 时间戳写法（`00:00.000–00:04.000`）到这里会算出 0 或负数 ⇒ 继续往下取裸 `Ns`
+    if (diff > 0) return diff;
+  }
+  const bare = head.match(SHOT_SECONDS_RE);
+  return bare ? Number(bare[1]) : null;
+}
 /** 〈分段建议〉旧写法（表格外的列表项）：`- **U2**：[Shot 3] + [Shot 4]（19.0 秒）` */
 const DECLARED_UNIT_LEGACY_RE = /^\s*[-*]?\s*\*{0,2}U(\d+)\*{0,2}\s*[：:]/;
+/**
+ * 〈分段建议〉等号写法（写手 2026-10 用的就是这个）：
+ * `U1 = Shot 1–Shot 5（0.0–15.0s，共 15 秒）` / 带 `【单元】` 前缀的同上。
+ * 🔴 少了这一条，写手自己划好的单元就白划 —— 会落回「按秒数贪心切」的兜底，
+ *    15 秒单单元脚本被切成 4 个单元（见 `readShotSeconds` 的注释）。
+ * 🔴 只认 `= ` 这一种分隔符：镜头行里的 `（U1·全片 00:00.000–…）` 不带等号，
+ *    不会被误当成单元声明。
+ */
+const DECLARED_UNIT_EQUALS_RE = /^\s*[-*]?\s*\**\s*(?:【单元】\s*)?U(\d+)\s*=/;
 /**
  * 〈分段建议〉写手现在的写法：
  * `- **【单元】U2 = Shot 4 – Shot 5**（全片 00:15.000–00:30.000，15 秒）｜第一问、第一答`
@@ -361,8 +397,7 @@ function parseShotRows(shotTable: string): ShotRow[] {
     const n = matchShotRowHead(line);
     if (n === null) continue;
     if (rows.some((r) => r.n === n)) continue;
-    const sec = line.slice(0, 120).match(SHOT_SECONDS_RE);
-    rows.push({ n, seconds: sec ? Number(sec[1]) : null });
+    rows.push({ n, seconds: readShotSeconds(line.slice(0, 120)) });
   }
   return rows;
 }
@@ -398,7 +433,10 @@ function parseDeclaredUnits(shotTable: string): number[][] | null {
     // 表格行一律跳过（它们是镜头行，不是单元声明）；唯一例外是明写 `【单元】` 的表格式分段建议。
     const isTableRow = line.trimStart().startsWith('|');
     if (isTableRow && !line.includes('【单元】')) continue;
-    const head = line.match(DECLARED_UNIT_INLINE_RE) ?? line.match(DECLARED_UNIT_LEGACY_RE);
+    const head =
+      line.match(DECLARED_UNIT_INLINE_RE) ??
+      line.match(DECLARED_UNIT_LEGACY_RE) ??
+      line.match(DECLARED_UNIT_EQUALS_RE);
     if (!head) continue;
     const k = Number(head[1]);
     const shots = collectShotNumbersLoose(line);

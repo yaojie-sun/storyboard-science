@@ -382,7 +382,9 @@ async fn describe_asset_inner(app: &AppHandle, asset_id: &str) -> Result<Option<
             ON CONFLICT(asset_id) DO UPDATE SET
               file_hash = ?2, description = ?3, model = ?4, updated_at = ?5
             "#,
-            params![asset_id, file_hash, description, "deepseek-v4-flash-vision-exp", now],
+            // 与 ai::describe::DEEPSEEK_VL_MODEL 保持一致；该列**只写不读**
+            // （查询只按 asset_id + file_hash 命中），因此改这个名字不会让缓存失效。
+            params![asset_id, file_hash, description, "deepseek-flash", now],
         )
         .map_err(|e| format!("Failed to save asset description: {}", e))?;
     }

@@ -220,14 +220,29 @@ npm run tauri build
 
 #### 步骤 5：执行发布命令
 
+🔴 **要用「显式版本号」写法，不能用 `patch`**：
+
 ```bash
-npm run release -- patch --notes-file docs/releases/v1.0.29.md
+# ✅ 正确：发布的就是阶段一本地测过的那一版
+npm run release -- 1.3.1 --notes-file docs/releases/v1.3.1.md
+
+# ❌ 错误：阶段一已经把版本号推到 1.3.1 了，
+#    再跑一次 patch 会变成 1.3.2 —— 你测的是 1.3.1，发出去的却是 1.3.2
+npm run release -- patch --notes-file docs/releases/v1.3.1.md
 ```
 
-或指定版本类型：
-- `patch` — 补丁版本（1.0.28 → 1.0.29）
-- `minor` — 次要版本（1.0.28 → 1.1.0）
-- `major` — 主要版本（1.0.28 → 2.0.0）
+`release.mjs` 的第一个参数既接受 `major` / `minor` / `patch`（在**当前**版本上再递增），
+也接受**显式版本号**（形如 `1.3.1`）。阶段一已经递增过一次，所以阶段二必须给显式版本号。
+
+| 写法 | 含义 |
+|---|---|
+| `1.3.1` | **发布这个确切版本**（阶段二应始终用这种） |
+| `patch` | 在 package.json 当前版本上 +1（1.3.0 → 1.3.1） |
+| `minor` | 在 package.json 当前版本上进次版本（1.3.0 → 1.4.0） |
+| `major` | 在 package.json 当前版本上进主版本（1.3.0 → 2.0.0） |
+
+> 版本号若已存在同名 tag，脚本会直接 `fail` 退出（`Tag v1.3.1 already exists.`）——
+> 这是防重复发布，不是故障。
 
 脚本自动执行：
 1. `git commit` 提交版本变更

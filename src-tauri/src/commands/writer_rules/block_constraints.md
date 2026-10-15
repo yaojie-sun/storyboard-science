@@ -27,6 +27,10 @@
    subject_definitions: / summary: / retention_analysis: / detailed_description: / overall_soundscape: / non_diegetic_music:
    客户端按字符串认段名，写错/漏段/换序 = 解析失败。主字段是 detailed_description，
    不是 integrated_multimodal_description。六段之外不要再加第七段工程约束段。
+   🔴 `summary` 首词必须是方括号任务类型（官方 §3 闭集：keyframe completion / reference generation /
+   video editing / video continuation / audio reuse / audio reference，可组合）。本仓这类任务
+   （用 `<Picture N>` 作生成指导、不作具体帧、也不是被编辑或续写的源视频）恒写 `[reference generation]`，
+   其后接目标视频与主要参考关系。`summary` 不写台词。
 12. 🔴 声音两段里「没有声音」只有官方占位符 `N/A` 一个写法 —— 官方原句逐字：
    · §4.6 "Use `N/A` only when the user explicitly requests complete silence throughout the video."
    · §4.7 "Use `N/A` when there is no non-diegetic music."
@@ -35,6 +39,7 @@
    Pan Left/Right、Truck Left/Right、Tilt Up/Down、Pedestal Up/Down、Arc Shot、Tracking Shot、
    Static Shot、Shake Slightly/Strongly、POV、Roll Clockwise/Counterclockwise）
    × 幅度（with small/large amplitude）× 速度（at slow/fast speed）。表以外的镜头动作不写。
+   同一镜内同一个运镜只写一次：不要句首写一次、句尾再重复一次（重复 = 让模型以为有两段运动）。
 14. 🔴 切镜只用官方 5 个动词之一，且与镜头内容同一行：
    the camera cuts to / the shot cuts to / the shot transitions to / the shot changes to / the shot switches to。
    不写 Cut to / Then / Begin with 这类裸指令。
@@ -42,10 +47,13 @@
    没写这一行 = 这一段一张参考图都不挂，系统不会替你找。
 16. 🔴 时间戳三条：[Shot 1] 不带时间戳；第 2 镜起 At MM:SS.mmm 严格递增且落在总时长内；
    镜头标记与镜头内容必须在同一行。
-17. 🔴 说话与嘴部（官方 §4.4 原句逐字）：
+17. 🔴 说话与嘴部（官方 §4.4 原句逐字 + 本仓【产品接线】）：
    "Place the speaker's identifying phrase, ID, action, and delivery outside `<d>`. Inside `<d>`,
    include only the language tag and the actual user-provided spoken content."
    ⇒ 说话人的识别语、ID、动作与语气写在 `<d>` 外面；`<d>` 里只放语言标签 + 用户台词原文（逐字不改）。
+   🔴 **【产品接线】画内说话在 `</d>` 之后逐字写**「他说话时下颌开合、嘴唇随字句张动」
+   （主语按实际说话人换成她/它，其余逐字不动）。这句**不是官方原句**，是本仓给模型的口型接线；
+   2026-10-16 曾按官方口径删掉，同日产品判定恢复。漏写 = 输出不合格。
    "For voiceover, use the exact phrase `says in an off-screen voiceover`. Immediately after every
    voiceover `<d>` block, state that the corresponding on-screen character's lips remain closed"
    ⇒ 画外音用 `(Sx)` + 台词逐字进 `<d>`，紧跟一句写明该人物双唇保持闭合（本仓沿用中文写法
@@ -55,8 +63,8 @@
    `carries over from the previous shot` / `remains audible across the transition`）；
    台词被片尾截断时用 `<cutoff>`。
    官方 §5.4：听不清的一段写 `[unclear]`，不许猜写或改写；标点只用 `,` `.` `?` `!` 这类基本书面符号。
-   官方 §5.4：`(Sx)` 只按目标视频里实际发声的先后编号一次并处处复用；多人同时发声用复合号 `(S1,S2)`；
-   `(Sx)` 不写进 `retention_analysis`。
+   官方 §5.4：`(Sx)` 只按目标视频里实际发声的先后编号一次并处处复用；**每个发声处都必须带上该人的 `(Sx)`**；
+   多人同时发声用复合号 `(S1,S2)`；`(Sx)` 不写进 `retention_analysis`。
    🔴🔴 有发声动作就必须有台词原文：正文里凡出现"说""开口"这类发声动作的镜头，本镜必须有不为空的
    `<d>[Chinese] 台词原文</d>` —— 模型没字可念，只会自己配一段听不懂的人声（客户听到的"声音不对"）。
    🔴 无用户台词的镜头，一律不许写成"正在说话"。二选一：
@@ -64,12 +72,18 @@
    ② 这一镜不需要台词 ⇒ 正面写不发声的嘴部动作，例如"她的双唇合着，只听得见呼吸"。
    🔴 背景人群的人声只写声层：overall_soundscape 里可以写"身后人群低沉的交谈声"这类非语言人声
    （声源+质感），但不许给无台词的背景人物写跟字同步的嘴部描述 —— 那等于给背景另开一条人声轨道。
-   有可见人物但没有台词的镜头，必须正面交代嘴在做什么。
+   🔴 **【产品接线】** 每一镜都要落到人嘴上：有可见人物但没有台词的镜头，必须正面交代嘴在做什么
+   （不能只写眼、眉、手）。
 18. 🔴 成片里不出现任何画面上的文字（招牌字、包装字、字幕、霓虹字、对话框）。
    用户脚本里的"心里说/心声/内心独白/旁白"一律走画外音（听见），不许改写成屏幕文字。
 19. 🔴 正文不许与 `retention_analysis` 打架：判了 `fully_preserved` 的，
    正文里就必须完全保留（官方 `ref-en.txt`：同一标签在 `retention_analysis` 与
    `detailed_description` 之间同义）。
+   正文里出现脱落、破损、数量变化、光影变化这类状态变化时，该条声明的范围必须覆盖它；
+   覆盖不到就改判 `partially_preserved`。覆盖不到又照旧标 `fully_preserved` = 自相矛盾，重写那句。
+   条目按官方模板写：`<Subject 1> (appears in [Shot 1], [Shot 3]): fully_preserved - …`
+   （半角括号，镜号用 `[Shot N]` 列出）。同一张图既作构图锚点 `<Picture N>`、其内容又另立
+   `<Subject N>` 时两条都保留，但元素不必重复罗列。
 20. 🔴 `detailed_description` **每一镜**都要把这七项交代齐 —— 官方 `ref-en.txt` 逐字：
    "For each shot, clearly establish the current composition, subject appearance and position,
    environment and lighting, actions and state changes, camera movement, current sound, and the
